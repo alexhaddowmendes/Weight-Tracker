@@ -90,6 +90,42 @@ button {
   padding: 12px 16px;
 }
 
+.chart-section {
+  position: relative;
+  min-height: 200px;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(26, 29, 36, 0.85);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.loading[hidden] {
+  display: none;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .range {
   display: flex;
   justify-content: center;

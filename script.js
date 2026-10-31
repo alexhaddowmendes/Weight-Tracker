@@ -5,6 +5,7 @@ Chart.defaults.borderColor = "#2c313c";
 
 const panelsEl = document.getElementById("panels");
 const messageEl = document.getElementById("message");
+const loadingEl = document.getElementById("chart-loading");
 const rangeButtons = document.querySelectorAll(".range button");
 
 let entries = [];
@@ -211,10 +212,15 @@ function renderChart() {
 }
 
 async function refresh() {
-  ({ entries, goals } = await fetchData());
-  showMessage("");
-  renderStatus();
-  renderChart();
+  loadingEl.hidden = false;
+  try {
+    ({ entries, goals } = await fetchData());
+    showMessage("");
+    renderStatus();
+    renderChart();
+  } finally {
+    loadingEl.hidden = true;
+  }
 }
 
 rangeButtons.forEach((button) => {
