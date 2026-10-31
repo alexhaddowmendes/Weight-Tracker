@@ -328,6 +328,38 @@ function dayRange(from, to) {
   return days;
 }
 
+// Draws a straight dashed horizontal line across the whole chart for each goal.
+const goalLinePlugin = {
+  id: "goalLines",
+  afterDatasetsDraw(chart, args, options) {
+    const { ctx, chartArea, scales } = chart;
+    // Labels sit at the left edge, nudged apart so two close goals don't overlap.
+    const placed = [];
+    for (const { kg, color, label } of options.lines ?? []) {
+      const y = scales.y.getPixelForValue(kg);
+      if (y < chartArea.top || y > chartArea.bottom) continue;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      const clash = placed.some((p) => Math.abs(p - y) < 14);
+      const labelY = clash ? y + 14 : y - 5;
+      placed.push(labelY);
+      ctx.fillText(label, chartArea.left + 6, labelY);
+      ctx.restore();
+    }
+  },
+};
+
 // Chart.js draws emoji as points when given a canvas as the point style.
 const emojiPointCache = {};
 function emojiPoint(emoji) {
@@ -385,29 +417,27 @@ function renderChart() {
       pointHoverRadius: labels.map((_, i) => (pointStyle[i] === "circle" ? 5 : 14)),
     };
 
-    const goal = goals.find((g) => g.person === name)?.kg;
-    if (goal === undefined) return [line];
-    const goalLine = {
-      label: `${name} goal`,
-      data: labels.map(() => goal),
-      borderColor: color,
-      backgroundColor: color,
-      borderDash: [6, 6],
-      borderWidth: 1.5,
-      pointRadius: 0,
-    };
-    return [line, goalLine];
+    return [line];
+  });
+
+  // Goal lines are drawn by a plugin so they span the full width of the graph,
+  // however few days of data there are.
+  const goalLines = PEOPLE.flatMap(({ name, color }) => {
+    const kg = goals.find((g) => g.person === name)?.kg;
+    return kg === undefined ? [] : [{ kg, color, label: `${name} goal · ${kg} kg` }];
   });
 
   const visibleKg = entries.filter((e) => e.date >= start).map((e) => e.kg);
-  const yMax = Math.max(...visibleKg) + 10;
-  const yMin = Math.max(0, Math.min(...visibleKg) - 30);
+  const allKg = [...visibleKg, ...goalLines.map((g) => g.kg)];
+  const yMax = Math.max(...allKg) + 10;
+  const yMin = Math.max(0, Math.min(...allKg) - 30);
 
   if (chart) {
     chart.data.labels = labels;
     chart.data.datasets = datasets;
     chart.options.scales.y.min = yMin;
     chart.options.scales.y.max = yMax;
+    chart.options.plugins.goalLines.lines = goalLines;
     chart.update();
     return;
   }
@@ -415,7 +445,9 @@ function renderChart() {
   chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: { labels, datasets },
+    plugins: [goalLinePlugin],
     options: {
+      plugins: { goalLines: { lines: goalLines } },
       scales: { y: { min: yMin, max: yMax, title: { display: true, text: "kg" } } },
       interaction: { mode: "index", intersect: false },
     },
