@@ -65,10 +65,12 @@ async function postEating(person, rating) {
   return response.json();
 }
 
+// The same icons are used on the buttons and as graph markers. OK has no graph
+// marker (`onGraph: false`): those days stay a regular dot.
 const RATINGS = [
-  { value: "good", emoji: "😊", label: "Good" },
-  { value: "ok", emoji: "😐", label: "OK" },
-  { value: "bad", emoji: "😞", label: "Bad" },
+  { value: "good", emoji: "🥗", label: "Good", onGraph: true },
+  { value: "ok", emoji: "🥪", label: "OK", onGraph: false },
+  { value: "bad", emoji: "🍔", label: "Bad", onGraph: true },
 ];
 
 function buildPanels() {
@@ -79,16 +81,17 @@ function buildPanels() {
       panel.dataset.person = name;
       panel.style.setProperty("--accent", color);
       panel.innerHTML = `
-        <h2>${name}</h2>
-        <p class="status"></p>
-        <p class="streak"></p>
+        <div class="head">
+          <h2>${name}</h2>
+          <span class="streak"></span>
+        </div>
         <p class="goal"></p>
         <div class="row">
-          <input type="number" step="0.1" min="20" max="400" placeholder="Today's weight (kg)" required>
+          <input type="number" step="0.1" min="20" max="400" placeholder="Today's weight (kg)" aria-label="${name}'s weight today in kg" required>
           <button type="submit">Save</button>
         </div>
         <div class="eating">
-          <span class="eating-label">Eating today <small>(optional)</small></span>
+          <span class="eating-label">Eating today · optional</span>
           <div class="eating-buttons">
             ${RATINGS.map(
               (r) => `<button type="button" data-rating="${r.value}" aria-pressed="false">${r.emoji} ${r.label}</button>`
@@ -124,6 +127,7 @@ async function onSave(event, person) {
     if (!result.ok) throw new Error(result.error);
     setMe(person);
     input.value = "";
+    input.dataset.prefill = ""; // so the refresh fills in the saved weight
     await refresh();
     celebrateSave(form);
     if (reachesGoal) launchConfetti();
@@ -177,13 +181,26 @@ function renderStatus() {
   const today = todayString();
   for (const { name } of PEOPLE) {
     const entry = entries.find((e) => e.person === name && e.date === today);
-    const status = panelsEl.querySelector(`[data-person="${name}"] .status`);
-    status.textContent = entry ? `✅ Logged today: ${entry.kg} kg` : "⏳ Not logged yet today";
-    status.classList.toggle("done", Boolean(entry));
+    renderWeightInput(name, entry);
     renderStreak(name);
     renderGoal(name);
     renderEating(name);
   }
+}
+
+// The box doubles as the logged/not-logged status: it shows today's weight once
+// saved. A weight the person is partway through typing is never overwritten.
+function renderWeightInput(name, entry) {
+  const row = panelsEl.querySelector(`[data-person="${name}"] .row`);
+  const input = row.querySelector("input");
+  const button = row.querySelector("button");
+  const untouched = input.value === (input.dataset.prefill ?? "");
+  const value = entry ? String(entry.kg) : "";
+  if (untouched) input.value = value;
+  input.dataset.prefill = value;
+  input.placeholder = entry ? "Today's weight (kg)" : "Not logged yet today (kg)";
+  row.classList.toggle("logged", Boolean(entry));
+  button.textContent = entry ? "Update" : "Save";
 }
 
 function hasReachedGoal(name, goal) {
@@ -221,10 +238,10 @@ function renderStreak(name) {
   const el = panelsEl.querySelector(`[data-person="${name}"] .streak`);
   const count = computeStreak(name);
   const loggedToday = entries.some((e) => e.person === name && e.date === todayString());
-  el.textContent = count === 0
-    ? ""
-    : `🔥 ${count} day streak${loggedToday ? "" : " · log today to keep it going"}`;
+  el.textContent = count === 0 ? "" : `🔥 ${count} day streak`;
+  el.title = loggedToday ? "" : "Log today to keep your streak going";
   el.classList.toggle("hot", count >= 7);
+  el.classList.toggle("at-risk", count > 0 && !loggedToday);
 }
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -238,7 +255,7 @@ function celebrateSave(panel) {
   const burst = document.createElement("span");
   burst.className = "burst";
   burst.textContent = "✓ Logged!";
-  panel.append(burst);
+  panel.querySelector(".row").append(burst);
   burst.addEventListener("animationend", () => burst.remove());
   panel.addEventListener("animationend", function done(e) {
     if (e.target !== panel) return; // ignore child animations bubbling up
@@ -399,8 +416,8 @@ function renderChart() {
   const datasets = PEOPLE.flatMap(({ name, color }) => {
     const byDate = new Map(entries.filter((e) => e.person === name).map((e) => [e.date, e.kg]));
     const ratingByDate = new Map(eating.filter((e) => e.person === name).map((e) => [e.date, e.rating]));
-    // Good = 👍, bad = 👎; OK or unrated days stay a regular dot.
-    const emojiFor = { good: "👍", bad: "👎" };
+    // Rated days get their button's icon; OK or unrated days stay a regular dot.
+    const emojiFor = Object.fromEntries(RATINGS.filter((r) => r.onGraph).map((r) => [r.value, r.emoji]));
     const pointStyle = labels.map((date) => {
       const emoji = emojiFor[ratingByDate.get(date)];
       return emoji ? emojiPoint(emoji) : "circle";

@@ -38,27 +38,26 @@ main {
   background: var(--surface);
   border-top: 4px solid var(--accent);
   border-radius: 6px;
-  padding: 12px 16px;
+  padding: 8px 14px 12px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .panel h2 {
-  margin: 0 0 4px;
+  margin: 0;
+  font-size: 1.25rem;
   color: var(--accent);
 }
 
-.status {
-  margin: 0 0 8px;
-  color: var(--muted);
-}
-
 .goal {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--muted);
   font-size: 0.9rem;
-}
-
-.status.done {
-  color: #4ade80;
 }
 
 .row {
@@ -148,9 +147,13 @@ button {
 }
 
 .streak {
-  margin: 0 0 8px;
   color: #fdba74;
   font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.streak.at-risk {
+  opacity: 0.6;
 }
 
 .streak:empty {
@@ -167,14 +170,22 @@ button {
   animation: panel-glow 0.9s ease-out;
 }
 
-.panel.saved .status {
+.panel.saved .row input {
   animation: pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.row {
+  position: relative;
+}
+
+.row.logged input {
+  border-color: #4ade80;
 }
 
 .burst {
   position: absolute;
-  top: 12px;
-  right: 16px;
+  top: -12px;
+  right: 4px;
   padding: 4px 10px;
   border-radius: 999px;
   background: #4ade80;
@@ -218,18 +229,14 @@ button {
 
 /* Eating day tracker */
 .eating {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .eating-label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   color: var(--muted);
   font-size: 0.85rem;
-}
-
-.eating-label small {
-  opacity: 0.7;
 }
 
 .eating-buttons {
@@ -239,8 +246,8 @@ button {
 }
 
 .eating-buttons button {
-  padding: 6px 4px;
-  font-size: 0.85rem;
+  padding: 4px;
+  font-size: 0.9rem;
   transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 
