@@ -87,8 +87,11 @@ function buildPanels() {
         </div>
         <p class="goal"></p>
         <div class="row">
-          <input type="number" step="0.1" min="20" max="400" placeholder="Today's weight (kg)" aria-label="${name}'s weight today in kg" required>
-          <button type="submit">Save</button>
+          <div class="field">
+            <input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done"
+              placeholder="Not logged yet today" aria-label="${name}'s weight today in kg">
+            <span class="unit">kg</span>
+          </div>
         </div>
         <div class="eating">
           <span class="eating-label">Eating today · optional</span>
@@ -98,7 +101,14 @@ function buildPanels() {
             ).join("")}
           </div>
         </div>`;
-      panel.addEventListener("submit", (event) => onSave(event, name));
+      const input = panel.querySelector(".row input");
+      input.addEventListener("input", () => (input.value = cleanWeight(input.value)));
+      // "change" fires when the entry is complete: Enter / Done on the keyboard, or tapping away.
+      input.addEventListener("change", () => saveWeight(panel, name));
+      panel.addEventListener("submit", (event) => {
+        event.preventDefault();
+        input.blur();
+      });
       panel.querySelectorAll(".eating-buttons button").forEach((b) =>
         b.addEventListener("click", () => onRate(name, b.dataset.rating))
       );
@@ -111,30 +121,48 @@ function buildPanels() {
   if (myInput) myInput.focus();
 }
 
-async function onSave(event, person) {
-  event.preventDefault();
-  const form = event.currentTarget;
+// Numbers and a single decimal point only, one decimal place (commas from
+// some keypads become points).
+function cleanWeight(text) {
+  const [whole, ...rest] = text.replace(/,/g, ".").replace(/[^0-9.]/g, "").split(".");
+  return rest.length ? `${whole}.${rest.join("").slice(0, 1)}` : whole;
+}
+
+async function saveWeight(form, person) {
   const input = form.querySelector("input");
-  const button = form.querySelector("button");
-  const kg = Number(input.value);
+  const saved = input.dataset.prefill ?? "";
+  const typed = input.value.replace(/\.$/, "");
+  input.value = typed;
+
+  // Nothing new to save: empty, or unchanged from what's already logged.
+  if (typed === "" || Number(typed) === Number(saved || NaN)) {
+    input.value = saved;
+    return;
+  }
+  const kg = Number(typed);
+  if (!(kg >= 20 && kg <= 400)) {
+    showMessage("Enter a weight between 20 and 400 kg.");
+    input.value = saved;
+    return;
+  }
   const goal = goals.find((g) => g.person === person)?.kg;
   // Confetti only fires the moment the goal is first reached, not on every save after.
   const reachesGoal = goal !== undefined && kg <= goal && !hasReachedGoal(person, goal);
 
-  button.disabled = true;
+  input.disabled = true;
   try {
     const result = await postEntry(person, kg);
     if (!result.ok) throw new Error(result.error);
     setMe(person);
-    input.value = "";
-    input.dataset.prefill = ""; // so the refresh fills in the saved weight
+    input.dataset.prefill = input.value; // so the refresh below treats it as saved
     await refresh();
     celebrateSave(form);
     if (reachesGoal) launchConfetti();
   } catch (error) {
+    input.value = saved;
     showMessage(`Couldn't save: ${error.message}`);
   } finally {
-    button.disabled = false;
+    input.disabled = false;
   }
 }
 
@@ -193,14 +221,11 @@ function renderStatus() {
 function renderWeightInput(name, entry) {
   const row = panelsEl.querySelector(`[data-person="${name}"] .row`);
   const input = row.querySelector("input");
-  const button = row.querySelector("button");
   const untouched = input.value === (input.dataset.prefill ?? "");
   const value = entry ? String(entry.kg) : "";
   if (untouched) input.value = value;
   input.dataset.prefill = value;
-  input.placeholder = entry ? "Today's weight (kg)" : "Not logged yet today (kg)";
   row.classList.toggle("logged", Boolean(entry));
-  button.textContent = entry ? "Update" : "Save";
 }
 
 function hasReachedGoal(name, goal) {

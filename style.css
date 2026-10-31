@@ -78,9 +78,29 @@ button {
   cursor: pointer;
 }
 
-.row input {
+.field {
+  position: relative;
   flex: 1;
-  min-width: 0;
+}
+
+.row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 40px;
+  font-size: 1.1rem; /* 16px+ stops iOS zooming in on focus */
+}
+
+.unit {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.row input:disabled {
+  opacity: 0.6;
 }
 
 .chart-section {
@@ -184,8 +204,8 @@ button {
 
 .burst {
   position: absolute;
-  top: -12px;
-  right: 4px;
+  top: 7px;
+  right: 40px;
   padding: 4px 10px;
   border-radius: 999px;
   background: #4ade80;
