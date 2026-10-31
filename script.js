@@ -142,6 +142,7 @@ async function onRate(person, rating) {
   // Update straight away; roll back if the save fails.
   setTodayRating(person, rating);
   renderEating(person);
+  renderChart();
   try {
     const result = await postEating(person, rating);
     if (!result.ok) throw new Error(result.error);
@@ -150,6 +151,7 @@ async function onRate(person, rating) {
   } catch (error) {
     setTodayRating(person, previous?.rating);
     renderEating(person);
+    renderChart();
     showMessage(
       `Couldn't save eating day: ${error.message}. If this keeps happening, redeploy the Apps Script (see README).`
     );
@@ -326,6 +328,24 @@ function dayRange(from, to) {
   return days;
 }
 
+// Chart.js draws emoji as points when given a canvas as the point style.
+const emojiPointCache = {};
+function emojiPoint(emoji) {
+  if (!emojiPointCache[emoji]) {
+    const size = 24;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.font = `${size - 6}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(emoji, size / 2, size / 2 + 1);
+    emojiPointCache[emoji] = canvas;
+  }
+  return emojiPointCache[emoji];
+}
+
 function renderChart() {
   if (entries.length === 0) {
     chart?.destroy();
@@ -346,6 +366,13 @@ function renderChart() {
 
   const datasets = PEOPLE.flatMap(({ name, color }) => {
     const byDate = new Map(entries.filter((e) => e.person === name).map((e) => [e.date, e.kg]));
+    const ratingByDate = new Map(eating.filter((e) => e.person === name).map((e) => [e.date, e.rating]));
+    // Good = 👍, bad = 👎; OK or unrated days stay a regular dot.
+    const emojiFor = { good: "👍", bad: "👎" };
+    const pointStyle = labels.map((date) => {
+      const emoji = emojiFor[ratingByDate.get(date)];
+      return emoji ? emojiPoint(emoji) : "circle";
+    });
     const line = {
       label: name,
       data: labels.map((date) => byDate.get(date) ?? null),
@@ -353,6 +380,9 @@ function renderChart() {
       backgroundColor: color,
       spanGaps: true,
       tension: 0.2,
+      pointStyle,
+      pointRadius: labels.map((_, i) => (pointStyle[i] === "circle" ? 3 : 12)),
+      pointHoverRadius: labels.map((_, i) => (pointStyle[i] === "circle" ? 5 : 14)),
     };
 
     const goal = goals.find((g) => g.person === name)?.kg;
