@@ -10,6 +10,7 @@ const rangeButtons = document.querySelectorAll(".range button");
 
 let entries = [];
 let goals = [];
+let eating = [];
 let rangeDays = 0;
 let chart;
 
@@ -42,7 +43,7 @@ async function fetchData() {
   const response = await fetch(API_URL);
   const data = await response.json();
   // An older deployed script returns a bare list of entries with no goals.
-  return Array.isArray(data) ? { entries: data, goals: [] } : data;
+  return Array.isArray(data) ? { entries: data, goals: [], eating: [] } : data;
 }
 
 async function postEntry(person, kg) {
@@ -54,6 +55,21 @@ async function postEntry(person, kg) {
   });
   return response.json();
 }
+
+async function postEating(person, rating) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ type: "eating", date: todayString(), person, rating }),
+  });
+  return response.json();
+}
+
+const RATINGS = [
+  { value: "good", emoji: "😊", label: "Good" },
+  { value: "ok", emoji: "😐", label: "OK" },
+  { value: "bad", emoji: "😞", label: "Bad" },
+];
 
 function buildPanels() {
   panelsEl.replaceChildren(
@@ -70,8 +86,19 @@ function buildPanels() {
         <div class="row">
           <input type="number" step="0.1" min="20" max="400" placeholder="Today's weight (kg)" required>
           <button type="submit">Save</button>
+        </div>
+        <div class="eating">
+          <span class="eating-label">Eating today <small>(optional)</small></span>
+          <div class="eating-buttons">
+            ${RATINGS.map(
+              (r) => `<button type="button" data-rating="${r.value}" aria-pressed="false">${r.emoji} ${r.label}</button>`
+            ).join("")}
+          </div>
         </div>`;
       panel.addEventListener("submit", (event) => onSave(event, name));
+      panel.querySelectorAll(".eating-buttons button").forEach((b) =>
+        b.addEventListener("click", () => onRate(name, b.dataset.rating))
+      );
       return panel;
     })
   );
@@ -107,6 +134,43 @@ async function onSave(event, person) {
   }
 }
 
+async function onRate(person, rating) {
+  const today = todayString();
+  const previous = eating.find((e) => e.person === person && e.date === today);
+  if (previous?.rating === rating) return;
+
+  // Update straight away; roll back if the save fails.
+  setTodayRating(person, rating);
+  renderEating(person);
+  try {
+    const result = await postEating(person, rating);
+    if (!result.ok) throw new Error(result.error);
+    setMe(person);
+    showMessage("");
+  } catch (error) {
+    setTodayRating(person, previous?.rating);
+    renderEating(person);
+    showMessage(
+      `Couldn't save eating day: ${error.message}. If this keeps happening, redeploy the Apps Script (see README).`
+    );
+  }
+}
+
+function setTodayRating(person, rating) {
+  const today = todayString();
+  eating = eating.filter((e) => !(e.person === person && e.date === today));
+  if (rating) eating.push({ date: today, person, rating });
+}
+
+function renderEating(name) {
+  const rating = eating.find((e) => e.person === name && e.date === todayString())?.rating;
+  panelsEl.querySelectorAll(`[data-person="${name}"] .eating-buttons button`).forEach((b) => {
+    const active = b.dataset.rating === rating;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-pressed", String(active));
+  });
+}
+
 function renderStatus() {
   const today = todayString();
   for (const { name } of PEOPLE) {
@@ -116,6 +180,7 @@ function renderStatus() {
     status.classList.toggle("done", Boolean(entry));
     renderStreak(name);
     renderGoal(name);
+    renderEating(name);
   }
 }
 
@@ -330,7 +395,7 @@ function renderChart() {
 async function refresh() {
   loadingEl.hidden = false;
   try {
-    ({ entries, goals } = await fetchData());
+    ({ entries, goals, eating = [] } = await fetchData());
     showMessage("");
     renderStatus();
     renderChart();
