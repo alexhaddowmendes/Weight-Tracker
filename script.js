@@ -187,9 +187,15 @@ function renderChart() {
     return [line, goalLine];
   });
 
+  const visibleKg = entries.filter((e) => e.date >= start).map((e) => e.kg);
+  const yMax = Math.max(...visibleKg) + 10;
+  const yMin = Math.max(0, Math.min(...visibleKg) - 30);
+
   if (chart) {
     chart.data.labels = labels;
     chart.data.datasets = datasets;
+    chart.options.scales.y.min = yMin;
+    chart.options.scales.y.max = yMax;
     chart.update();
     return;
   }
@@ -198,7 +204,7 @@ function renderChart() {
     type: "line",
     data: { labels, datasets },
     options: {
-      scales: { y: { beginAtZero: true, title: { display: true, text: "kg" } } },
+      scales: { y: { min: yMin, max: yMax, title: { display: true, text: "kg" } } },
       interaction: { mode: "index", intersect: false },
     },
   });
