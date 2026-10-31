@@ -2,6 +2,7 @@
 // then Deploy > New deployment > Web app > Execute as: Me, Who has access: Anyone.
 
 const SHEET_NAME = "Weights";
+const GOALS_SHEET_NAME = "Goals";
 const PEOPLE = ["Alex", "Rochelle"];
 const MIN_KG = 20;
 const MAX_KG = 400;
@@ -30,17 +31,32 @@ function json(data) {
   );
 }
 
+function getGoalsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(GOALS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(GOALS_SHEET_NAME);
+    sheet.appendRow(["Person", "Goal Kg"]);
+    PEOPLE.forEach((person) => sheet.appendRow([person, ""]));
+  }
+  return sheet;
+}
+
 function doGet() {
   const rows = getSheet().getDataRange().getValues().slice(1);
-  return json(
-    rows
+  const goalRows = getGoalsSheet().getDataRange().getValues().slice(1);
+  return json({
+    entries: rows
       .filter((row) => row[0] !== "")
       .map(([date, person, kg]) => ({
         date: dateToString(date),
         person,
         kg: Number(kg),
-      }))
-  );
+      })),
+    goals: goalRows
+      .filter(([person, kg]) => PEOPLE.includes(person) && kg !== "")
+      .map(([person, kg]) => ({ person, kg: Number(kg) })),
+  });
 }
 
 function doPost(e) {

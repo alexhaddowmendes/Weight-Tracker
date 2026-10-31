@@ -50,6 +50,12 @@ main {
   color: var(--muted);
 }
 
+.goal {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .status.done {
   color: #4ade80;
 }

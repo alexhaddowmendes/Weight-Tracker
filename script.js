@@ -8,6 +8,7 @@ const messageEl = document.getElementById("message");
 const rangeButtons = document.querySelectorAll(".range button");
 
 let entries = [];
+let goals = [];
 let rangeDays = 0;
 let chart;
 
@@ -36,9 +37,11 @@ function setMe(name) {
   } catch {}
 }
 
-async function fetchEntries() {
+async function fetchData() {
   const response = await fetch(API_URL);
-  return response.json();
+  const data = await response.json();
+  // An older deployed script returns a bare list of entries with no goals.
+  return Array.isArray(data) ? { entries: data, goals: [] } : data;
 }
 
 async function postEntry(person, kg) {
@@ -61,6 +64,7 @@ function buildPanels() {
       panel.innerHTML = `
         <h2>${name}</h2>
         <p class="status"></p>
+        <p class="goal"></p>
         <div class="row">
           <input type="number" step="0.1" min="20" max="400" placeholder="Today's weight (kg)" required>
           <button type="submit">Save</button>
@@ -103,7 +107,30 @@ function renderStatus() {
     const status = panelsEl.querySelector(`[data-person="${name}"] .status`);
     status.textContent = entry ? `✅ Logged today: ${entry.kg} kg` : "⏳ Not logged yet today";
     status.classList.toggle("done", Boolean(entry));
+    renderGoal(name);
   }
+}
+
+function renderGoal(name) {
+  const goalEl = panelsEl.querySelector(`[data-person="${name}"] .goal`);
+  const goal = goals.find((g) => g.person === name)?.kg;
+  const latest = entries
+    .filter((e) => e.person === name)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  if (goal === undefined) {
+    goalEl.textContent = "";
+    return;
+  }
+  if (!latest) {
+    goalEl.textContent = `Goal: ${goal} kg`;
+    return;
+  }
+
+  const diff = Math.round((latest.kg - goal) * 10) / 10;
+  if (diff > 0) goalEl.textContent = `Goal: ${goal} kg · ${diff} kg to lose`;
+  else if (diff < 0) goalEl.textContent = `Goal: ${goal} kg · ${-diff} kg under goal`;
+  else goalEl.textContent = `Goal: ${goal} kg · reached 🎉`;
 }
 
 function dayRange(from, to) {
@@ -135,9 +162,9 @@ function renderChart() {
   }
   const labels = dayRange(start, today);
 
-  const datasets = PEOPLE.map(({ name, color }) => {
+  const datasets = PEOPLE.flatMap(({ name, color }) => {
     const byDate = new Map(entries.filter((e) => e.person === name).map((e) => [e.date, e.kg]));
-    return {
+    const line = {
       label: name,
       data: labels.map((date) => byDate.get(date) ?? null),
       borderColor: color,
@@ -145,6 +172,19 @@ function renderChart() {
       spanGaps: true,
       tension: 0.2,
     };
+
+    const goal = goals.find((g) => g.person === name)?.kg;
+    if (goal === undefined) return [line];
+    const goalLine = {
+      label: `${name} goal`,
+      data: labels.map(() => goal),
+      borderColor: color,
+      backgroundColor: color,
+      borderDash: [6, 6],
+      borderWidth: 1.5,
+      pointRadius: 0,
+    };
+    return [line, goalLine];
   });
 
   if (chart) {
@@ -165,7 +205,7 @@ function renderChart() {
 }
 
 async function refresh() {
-  entries = await fetchEntries();
+  ({ entries, goals } = await fetchData());
   showMessage("");
   renderStatus();
   renderChart();
