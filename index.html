@@ -4,6 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Weight Tracker</title>
+  <meta name="theme-color" content="#0f1115">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Weight">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,6 +23,10 @@
 
     <section class="chart-section">
       <canvas id="chart"></canvas>
+      <div id="chart-loading" class="loading" hidden>
+        <div class="spinner"></div>
+        <span>Loading data…</span>
+      </div>
       <div class="range">
         <button data-days="30">30d</button>
         <button data-days="90">90d</button>
@@ -22,6 +34,8 @@
       </div>
     </section>
   </main>
+
+  <canvas id="confetti" aria-hidden="true"></canvas>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="config.js"></script>

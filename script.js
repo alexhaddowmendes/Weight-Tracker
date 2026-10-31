@@ -5,6 +5,7 @@ Chart.defaults.borderColor = "#2c313c";
 
 const panelsEl = document.getElementById("panels");
 const messageEl = document.getElementById("message");
+const loadingEl = document.getElementById("chart-loading");
 const rangeButtons = document.querySelectorAll(".range button");
 
 let entries = [];
@@ -64,6 +65,7 @@ function buildPanels() {
       panel.innerHTML = `
         <h2>${name}</h2>
         <p class="status"></p>
+        <p class="streak"></p>
         <p class="goal"></p>
         <div class="row">
           <input type="number" step="0.1" min="20" max="400" placeholder="Today's weight (kg)" required>
@@ -85,6 +87,9 @@ async function onSave(event, person) {
   const input = form.querySelector("input");
   const button = form.querySelector("button");
   const kg = Number(input.value);
+  const goal = goals.find((g) => g.person === person)?.kg;
+  // Confetti only fires the moment the goal is first reached, not on every save after.
+  const reachesGoal = goal !== undefined && kg <= goal && !hasReachedGoal(person, goal);
 
   button.disabled = true;
   try {
@@ -93,6 +98,8 @@ async function onSave(event, person) {
     setMe(person);
     input.value = "";
     await refresh();
+    celebrateSave(form);
+    if (reachesGoal) launchConfetti();
   } catch (error) {
     showMessage(`Couldn't save: ${error.message}`);
   } finally {
@@ -107,16 +114,126 @@ function renderStatus() {
     const status = panelsEl.querySelector(`[data-person="${name}"] .status`);
     status.textContent = entry ? `✅ Logged today: ${entry.kg} kg` : "⏳ Not logged yet today";
     status.classList.toggle("done", Boolean(entry));
+    renderStreak(name);
     renderGoal(name);
   }
+}
+
+function hasReachedGoal(name, goal) {
+  const latest = latestEntry(name);
+  return Boolean(latest) && latest.kg <= goal;
+}
+
+function latestEntry(name) {
+  return entries
+    .filter((e) => e.person === name)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+
+function shiftDate(dateString, days) {
+  const d = new Date(dateString + "T12:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString("sv");
+}
+
+// Consecutive days logged. A streak stays alive until the end of today, so
+// not having logged yet today doesn't reset it.
+function computeStreak(name) {
+  const dates = new Set(entries.filter((e) => e.person === name).map((e) => e.date));
+  let day = todayString();
+  if (!dates.has(day)) day = shiftDate(day, -1);
+  let count = 0;
+  while (dates.has(day)) {
+    count++;
+    day = shiftDate(day, -1);
+  }
+  return count;
+}
+
+function renderStreak(name) {
+  const el = panelsEl.querySelector(`[data-person="${name}"] .streak`);
+  const count = computeStreak(name);
+  const loggedToday = entries.some((e) => e.person === name && e.date === todayString());
+  el.textContent = count === 0
+    ? ""
+    : `🔥 ${count} day streak${loggedToday ? "" : " · log today to keep it going"}`;
+  el.classList.toggle("hot", count >= 7);
+}
+
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function celebrateSave(panel) {
+  if (reducedMotion.matches) return;
+  panel.classList.remove("saved");
+  void panel.offsetWidth; // restart the animation if saved twice quickly
+  panel.classList.add("saved");
+
+  const burst = document.createElement("span");
+  burst.className = "burst";
+  burst.textContent = "✓ Logged!";
+  panel.append(burst);
+  burst.addEventListener("animationend", () => burst.remove());
+  panel.addEventListener("animationend", function done(e) {
+    if (e.target !== panel) return; // ignore child animations bubbling up
+    panel.classList.remove("saved");
+    panel.removeEventListener("animationend", done);
+  });
+}
+
+function launchConfetti() {
+  if (reducedMotion.matches) return;
+  const canvas = document.getElementById("confetti");
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  ctx.scale(dpr, dpr);
+
+  const colors = [...PEOPLE.map((p) => p.color), "#fde68a", "#4ade80", "#ffffff"];
+  const pieces = Array.from({ length: 160 }, (_, i) => {
+    const fromLeft = i % 2 === 0;
+    const angle = (fromLeft ? -60 : -120) * (Math.PI / 180) + (Math.random() - 0.5) * 0.9;
+    const speed = 9 + Math.random() * 9;
+    return {
+      x: fromLeft ? 0 : window.innerWidth,
+      y: window.innerHeight * 0.75,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: 6 + Math.random() * 6,
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.35,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    };
+  });
+
+  const start = performance.now();
+  const duration = 3500;
+  (function frame(now) {
+    const t = now - start;
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    for (const p of pieces) {
+      p.vy += 0.25;
+      p.vx *= 0.99;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, (duration - t) / 800));
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+      ctx.restore();
+    }
+    if (t < duration) requestAnimationFrame(frame);
+    else ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  })(start);
 }
 
 function renderGoal(name) {
   const goalEl = panelsEl.querySelector(`[data-person="${name}"] .goal`);
   const goal = goals.find((g) => g.person === name)?.kg;
-  const latest = entries
-    .filter((e) => e.person === name)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const latest = latestEntry(name);
 
   if (goal === undefined) {
     goalEl.textContent = "";
@@ -211,10 +328,15 @@ function renderChart() {
 }
 
 async function refresh() {
-  ({ entries, goals } = await fetchData());
-  showMessage("");
-  renderStatus();
-  renderChart();
+  loadingEl.hidden = false;
+  try {
+    ({ entries, goals } = await fetchData());
+    showMessage("");
+    renderStatus();
+    renderChart();
+  } finally {
+    loadingEl.hidden = true;
+  }
 }
 
 rangeButtons.forEach((button) => {
@@ -230,4 +352,9 @@ if (!API_URL) {
   showMessage("Not set up yet: add the Apps Script URL to config.js (see README).");
 } else {
   refresh().catch(() => showMessage("Couldn't load data. Check your connection and refresh."));
+}
+
+// Lets the site be installed to the home screen (needs https or localhost).
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }
