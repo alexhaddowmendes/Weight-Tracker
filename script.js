@@ -46,29 +46,39 @@ async function fetchData() {
   return Array.isArray(data) ? { entries: data, goals: [], eating: [] } : data;
 }
 
-async function postEntry(person, kg) {
+// Which day each person is logging for: today, or yesterday when they tick
+// the "log yesterday" box to fill in a missed day.
+const backfill = {};
+
+function targetDate(name) {
+  return backfill[name] ? shiftDate(todayString(), -1) : todayString();
+}
+
+async function postEntry(person, kg, date) {
   const response = await fetch(API_URL, {
     method: "POST",
     // text/plain avoids a CORS preflight, which Apps Script can't answer
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ date: todayString(), person, kg }),
+    body: JSON.stringify({ date, person, kg }),
   });
   return response.json();
 }
 
-async function postEating(person, rating) {
+async function postEating(person, rating, date) {
   const response = await fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ type: "eating", date: todayString(), person, rating }),
+    body: JSON.stringify({ type: "eating", date, person, rating }),
   });
   return response.json();
 }
 
+// The same icons are used on the buttons and as graph markers. OK has no graph
+// marker (`onGraph: false`): those days stay a regular dot.
 const RATINGS = [
-  { value: "good", emoji: "😊", label: "Good" },
-  { value: "ok", emoji: "😐", label: "OK" },
-  { value: "bad", emoji: "😞", label: "Bad" },
+  { value: "good", emoji: "👍", label: "Good", onGraph: true },
+  { value: "ok", emoji: "🫳", label: "OK", onGraph: false },
+  { value: "bad", emoji: "👎", label: "Bad", onGraph: true },
 ];
 
 function buildPanels() {
@@ -79,77 +89,124 @@ function buildPanels() {
       panel.dataset.person = name;
       panel.style.setProperty("--accent", color);
       panel.innerHTML = `
-        <h2>${name}</h2>
-        <p class="status"></p>
-        <p class="streak"></p>
+        <div class="head">
+          <h2>${name}</h2>
+          <span class="streak"></span>
+        </div>
         <p class="goal"></p>
         <div class="row">
-          <input type="number" step="0.1" min="20" max="400" placeholder="Today's weight (kg)" required>
-          <button type="submit">Save</button>
+          <div class="field">
+            <input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done"
+              placeholder="Not logged yet today" aria-label="${name}'s weight today in kg">
+            <span class="unit">kg</span>
+          </div>
+          <button type="submit" class="go" aria-label="Save weight">➡️</button>
         </div>
         <div class="eating">
-          <span class="eating-label">Eating today <small>(optional)</small></span>
+          <span class="eating-label">Diet?</span>
           <div class="eating-buttons">
             ${RATINGS.map(
-              (r) => `<button type="button" data-rating="${r.value}" aria-pressed="false">${r.emoji} ${r.label}</button>`
+              (r) => `<button type="button" data-rating="${r.value}" aria-label="${r.label}" title="${r.label}" aria-pressed="false">${r.emoji}</button>`
             ).join("")}
           </div>
-        </div>`;
-      panel.addEventListener("submit", (event) => onSave(event, name));
+        </div>
+        <label class="backfill" hidden>
+          <input type="checkbox"> Log yesterday <small>(missed)</small>
+        </label>`;
+      const input = panel.querySelector(".row input");
+      input.addEventListener("input", () => (input.value = cleanWeight(input.value)));
+      // "change" fires when the entry is complete: Enter / Done on the keyboard, or tapping away.
+      input.addEventListener("change", () => saveWeight(panel, name));
+      panel.addEventListener("submit", (event) => {
+        event.preventDefault();
+        input.blur();
+      });
       panel.querySelectorAll(".eating-buttons button").forEach((b) =>
         b.addEventListener("click", () => onRate(name, b.dataset.rating))
       );
+      panel.querySelector(".backfill input").addEventListener("change", (event) => {
+        backfill[name] = event.target.checked;
+        // Switch the box over to the other day's weight.
+        input.value = "";
+        input.dataset.prefill = "";
+        renderStatus();
+      });
       return panel;
     })
   );
 
   const me = getMe();
-  const myInput = panelsEl.querySelector(`[data-person="${me}"] input`);
+  const myInput = panelsEl.querySelector(`[data-person="${me}"] .row input`);
   if (myInput) myInput.focus();
 }
 
-async function onSave(event, person) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const input = form.querySelector("input");
-  const button = form.querySelector("button");
-  const kg = Number(input.value);
+// Numbers and a single decimal point only, one decimal place (commas from
+// some keypads become points).
+function cleanWeight(text) {
+  const [whole, ...rest] = text.replace(/,/g, ".").replace(/[^0-9.]/g, "").split(".");
+  return rest.length ? `${whole}.${rest.join("").slice(0, 1)}` : whole;
+}
+
+async function saveWeight(form, person) {
+  if (form.dataset.saving) return; // Enter, blur and the button can all fire together
+  const input = form.querySelector(".row input");
+  if (input.disabled) return;
+  const saved = input.dataset.prefill ?? "";
+  const typed = input.value.replace(/\.$/, "");
+  input.value = typed;
+
+  // Nothing new to save: empty, or unchanged from what's already logged.
+  if (typed === "" || Number(typed) === Number(saved || NaN)) {
+    input.value = saved;
+    return;
+  }
+  const kg = Number(typed);
+  if (!(kg >= 20 && kg <= 400)) {
+    showMessage("Enter a weight between 20 and 400 kg.");
+    input.value = saved;
+    return;
+  }
   const goal = goals.find((g) => g.person === person)?.kg;
   // Confetti only fires the moment the goal is first reached, not on every save after.
-  const reachesGoal = goal !== undefined && kg <= goal && !hasReachedGoal(person, goal);
+  const reachesGoal =
+    !backfill[person] && goal !== undefined && kg <= goal && !hasReachedGoal(person, goal);
 
-  button.disabled = true;
+  form.dataset.saving = "1";
+  form.classList.add("saving");
   try {
-    const result = await postEntry(person, kg);
+    const result = await postEntry(person, kg, targetDate(person));
     if (!result.ok) throw new Error(result.error);
     setMe(person);
-    input.value = "";
+    input.dataset.prefill = input.value; // so the refresh below treats it as saved
     await refresh();
     celebrateSave(form);
     if (reachesGoal) launchConfetti();
   } catch (error) {
+    input.value = saved;
     showMessage(`Couldn't save: ${error.message}`);
   } finally {
-    button.disabled = false;
+    delete form.dataset.saving;
+    form.classList.remove("saving");
   }
 }
 
 async function onRate(person, rating) {
-  const today = todayString();
-  const previous = eating.find((e) => e.person === person && e.date === today);
+  const date = targetDate(person);
+  const previous = eating.find((e) => e.person === person && e.date === date);
   if (previous?.rating === rating) return;
+  if (backfill[person] && previous) return; // yesterday is only for a missed day
 
   // Update straight away; roll back if the save fails.
-  setTodayRating(person, rating);
+  setRating(person, rating, date);
   renderEating(person);
   renderChart();
   try {
-    const result = await postEating(person, rating);
+    const result = await postEating(person, rating, date);
     if (!result.ok) throw new Error(result.error);
     setMe(person);
     showMessage("");
   } catch (error) {
-    setTodayRating(person, previous?.rating);
+    setRating(person, previous?.rating, date);
     renderEating(person);
     renderChart();
     showMessage(
@@ -158,32 +215,59 @@ async function onRate(person, rating) {
   }
 }
 
-function setTodayRating(person, rating) {
-  const today = todayString();
-  eating = eating.filter((e) => !(e.person === person && e.date === today));
-  if (rating) eating.push({ date: today, person, rating });
+function setRating(person, rating, date) {
+  eating = eating.filter((e) => !(e.person === person && e.date === date));
+  if (rating) eating.push({ date, person, rating });
 }
 
 function renderEating(name) {
-  const rating = eating.find((e) => e.person === name && e.date === todayString())?.rating;
+  const rating = eating.find((e) => e.person === name && e.date === targetDate(name))?.rating;
+  const locked = backfill[name] && Boolean(rating);
   panelsEl.querySelectorAll(`[data-person="${name}"] .eating-buttons button`).forEach((b) => {
     const active = b.dataset.rating === rating;
     b.classList.toggle("active", active);
     b.setAttribute("aria-pressed", String(active));
+    b.disabled = locked;
   });
 }
 
+// The "log yesterday" box only appears while yesterday still has something
+// missing (or while it is ticked, so it doesn't vanish as you fill it in).
+function renderBackfill(name) {
+  const yesterday = shiftDate(todayString(), -1);
+  const missingWeight = !entries.some((e) => e.person === name && e.date === yesterday);
+  const missingDiet = !eating.some((e) => e.person === name && e.date === yesterday);
+  const label = panelsEl.querySelector(`[data-person="${name}"] .backfill`);
+  label.hidden = !(missingWeight || missingDiet || backfill[name]);
+}
+
 function renderStatus() {
-  const today = todayString();
   for (const { name } of PEOPLE) {
-    const entry = entries.find((e) => e.person === name && e.date === today);
-    const status = panelsEl.querySelector(`[data-person="${name}"] .status`);
-    status.textContent = entry ? `✅ Logged today: ${entry.kg} kg` : "⏳ Not logged yet today";
-    status.classList.toggle("done", Boolean(entry));
+    renderWeightInput(name);
     renderStreak(name);
     renderGoal(name);
     renderEating(name);
+    renderBackfill(name);
   }
+}
+
+// The box doubles as the logged/not-logged status: it shows today's weight once
+// saved. A weight the person is partway through typing is never overwritten.
+function renderWeightInput(name) {
+  const date = targetDate(name);
+  const entry = entries.find((e) => e.person === name && e.date === date);
+  const row = panelsEl.querySelector(`[data-person="${name}"] .row`);
+  const input = row.querySelector("input");
+  const untouched = input.value === (input.dataset.prefill ?? "");
+  const value = entry ? String(entry.kg) : "";
+  if (untouched) input.value = value;
+  input.dataset.prefill = value;
+  row.classList.toggle("logged", Boolean(entry));
+  input.placeholder = backfill[name] ? "Yesterday's weight" : "Not logged yet today";
+  // Yesterday can only be filled in if it was missed.
+  const locked = Boolean(backfill[name] && entry);
+  input.disabled = locked;
+  row.querySelector(".go").disabled = locked;
 }
 
 function hasReachedGoal(name, goal) {
@@ -221,10 +305,10 @@ function renderStreak(name) {
   const el = panelsEl.querySelector(`[data-person="${name}"] .streak`);
   const count = computeStreak(name);
   const loggedToday = entries.some((e) => e.person === name && e.date === todayString());
-  el.textContent = count === 0
-    ? ""
-    : `🔥 ${count} day streak${loggedToday ? "" : " · log today to keep it going"}`;
+  el.textContent = count === 0 ? "" : `🔥 ${count} day streak`;
+  el.title = loggedToday ? "" : "Log today to keep your streak going";
   el.classList.toggle("hot", count >= 7);
+  el.classList.toggle("at-risk", count > 0 && !loggedToday);
 }
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -238,7 +322,7 @@ function celebrateSave(panel) {
   const burst = document.createElement("span");
   burst.className = "burst";
   burst.textContent = "✓ Logged!";
-  panel.append(burst);
+  panel.querySelector(".row").append(burst);
   burst.addEventListener("animationend", () => burst.remove());
   panel.addEventListener("animationend", function done(e) {
     if (e.target !== panel) return; // ignore child animations bubbling up
@@ -399,8 +483,8 @@ function renderChart() {
   const datasets = PEOPLE.flatMap(({ name, color }) => {
     const byDate = new Map(entries.filter((e) => e.person === name).map((e) => [e.date, e.kg]));
     const ratingByDate = new Map(eating.filter((e) => e.person === name).map((e) => [e.date, e.rating]));
-    // Good = 👍, bad = 👎; OK or unrated days stay a regular dot.
-    const emojiFor = { good: "👍", bad: "👎" };
+    // Rated days get their button's icon; OK or unrated days stay a regular dot.
+    const emojiFor = Object.fromEntries(RATINGS.filter((r) => r.onGraph).map((r) => [r.value, r.emoji]));
     const pointStyle = labels.map((date) => {
       const emoji = emojiFor[ratingByDate.get(date)];
       return emoji ? emojiPoint(emoji) : "circle";

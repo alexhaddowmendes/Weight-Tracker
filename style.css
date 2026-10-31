@@ -38,27 +38,26 @@ main {
   background: var(--surface);
   border-top: 4px solid var(--accent);
   border-radius: 6px;
-  padding: 12px 16px;
+  padding: 8px 14px 12px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .panel h2 {
-  margin: 0 0 4px;
+  margin: 0;
+  font-size: 1.25rem;
   color: var(--accent);
 }
 
-.status {
-  margin: 0 0 8px;
-  color: var(--muted);
-}
-
 .goal {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--muted);
   font-size: 0.9rem;
-}
-
-.status.done {
-  color: #4ade80;
 }
 
 .row {
@@ -79,9 +78,29 @@ button {
   cursor: pointer;
 }
 
-.row input {
+.field {
+  position: relative;
   flex: 1;
-  min-width: 0;
+}
+
+.row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 40px;
+  font-size: 1.1rem; /* 16px+ stops iOS zooming in on focus */
+}
+
+.unit {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.row input:disabled {
+  opacity: 0.6;
 }
 
 .chart-section {
@@ -148,9 +167,13 @@ button {
 }
 
 .streak {
-  margin: 0 0 8px;
   color: #fdba74;
   font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.streak.at-risk {
+  opacity: 0.6;
 }
 
 .streak:empty {
@@ -167,14 +190,22 @@ button {
   animation: panel-glow 0.9s ease-out;
 }
 
-.panel.saved .status {
+.panel.saved .row input {
   animation: pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.row {
+  position: relative;
+}
+
+.row.logged input {
+  border-color: #4ade80;
 }
 
 .burst {
   position: absolute;
-  top: 12px;
-  right: 16px;
+  top: 7px;
+  right: 40px;
   padding: 4px 10px;
   border-radius: 999px;
   background: #4ade80;
@@ -218,18 +249,64 @@ button {
 
 /* Eating day tracker */
 .eating {
-  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.eating-buttons {
+  flex: 1;
+}
+
+.row .go {
+  flex: none;
+  width: 48px;
+  padding: 0;
+  font-size: 1.2rem;
+}
+
+.row .go:disabled,
+.eating-buttons button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.saving .row {
+  opacity: 0.7;
+}
+
+.backfill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.backfill[hidden] {
+  display: none;
+}
+
+.backfill input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: #4ade80;
+}
+
+.backfill small {
+  opacity: 0.7;
 }
 
 .eating-label {
-  display: block;
-  margin-bottom: 6px;
+  margin: 0;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 0.85rem;
-}
-
-.eating-label small {
-  opacity: 0.7;
 }
 
 .eating-buttons {
@@ -239,8 +316,8 @@ button {
 }
 
 .eating-buttons button {
-  padding: 6px 4px;
-  font-size: 0.85rem;
+  padding: 4px;
+  font-size: 1.15rem;
   transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 
