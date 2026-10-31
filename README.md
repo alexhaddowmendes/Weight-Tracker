@@ -10,7 +10,13 @@ A simple static website for Alex and Rochelle to log their weight once a day and
 4. Copy the web app URL into `API_URL` in [`config.js`](config.js).
 5. In the GitHub repo, go to **Settings > Pages** and serve the `main` branch, root folder.
 
+## Updating the Apps Script
+
+When `apps-script/Code.gs` changes (for example the eating-day tracker, which adds an `Eating` sheet), paste the new version into the Apps Script editor, then **Deploy > Manage deployments > Edit (pencil) > Version: New version > Deploy**. The web app URL stays the same.
+
 ## Notes
+
+- Eating day (good / OK / bad) is optional. It is stored in the `Eating` sheet, one rating per person per day, and can be changed during the day.
 
 - Each person has one entry per day. Saving again on the same day overwrites it.
 - There is no login. Anyone with the script URL can write to the sheet, which is an accepted trade-off for a two-person site.

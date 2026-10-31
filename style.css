@@ -215,3 +215,50 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2s; }
 }
+
+/* Eating day tracker */
+.eating {
+  margin-top: 12px;
+}
+
+.eating-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.eating-label small {
+  opacity: 0.7;
+}
+
+.eating-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.eating-buttons button {
+  padding: 6px 4px;
+  font-size: 0.85rem;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.eating-buttons button:active {
+  transform: scale(0.95);
+}
+
+.eating-buttons button.active[data-rating="good"] {
+  background: #14532d;
+  border-color: #4ade80;
+}
+
+.eating-buttons button.active[data-rating="ok"] {
+  background: #5c4a0a;
+  border-color: #fbbf24;
+}
+
+.eating-buttons button.active[data-rating="bad"] {
+  background: #5b1a1a;
+  border-color: #f87171;
+}

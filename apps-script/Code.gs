@@ -3,6 +3,8 @@
 
 const SHEET_NAME = "Weights";
 const GOALS_SHEET_NAME = "Goals";
+const EATING_SHEET_NAME = "Eating";
+const RATINGS = ["good", "ok", "bad"];
 const PEOPLE = ["Alex", "Rochelle"];
 const MIN_KG = 20;
 const MAX_KG = 400;
@@ -42,9 +44,21 @@ function getGoalsSheet() {
   return sheet;
 }
 
+function getEatingSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(EATING_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(EATING_SHEET_NAME);
+    sheet.appendRow(["Date", "Person", "Rating"]);
+  }
+  sheet.getRange("A:A").setNumberFormat("@");
+  return sheet;
+}
+
 function doGet() {
   const rows = getSheet().getDataRange().getValues().slice(1);
   const goalRows = getGoalsSheet().getDataRange().getValues().slice(1);
+  const eatingRows = getEatingSheet().getDataRange().getValues().slice(1);
   return json({
     entries: rows
       .filter((row) => row[0] !== "")
@@ -56,6 +70,9 @@ function doGet() {
     goals: goalRows
       .filter(([person, kg]) => PEOPLE.includes(person) && kg !== "")
       .map(([person, kg]) => ({ person, kg: Number(kg) })),
+    eating: eatingRows
+      .filter(([date, person, rating]) => date !== "" && RATINGS.includes(rating))
+      .map(([date, person, rating]) => ({ date: dateToString(date), person, rating })),
   });
 }
 
@@ -68,10 +85,12 @@ function doPost(e) {
   }
 
   const { date, person } = body;
+  const isEating = body.type === "eating";
   const kg = Math.round(Number(body.kg) * 10) / 10;
 
   if (!PEOPLE.includes(person)) return json({ ok: false, error: "Unknown person" });
-  if (!(kg >= MIN_KG && kg <= MAX_KG)) return json({ ok: false, error: "Weight out of range" });
+  if (isEating && !RATINGS.includes(body.rating)) return json({ ok: false, error: "Unknown rating" });
+  if (!isEating && !(kg >= MIN_KG && kg <= MAX_KG)) return json({ ok: false, error: "Weight out of range" });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isNearToday(date)) {
     return json({ ok: false, error: "Date must be today" });
   }
@@ -79,6 +98,7 @@ function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
+    if (isEating) return saveEating(date, person, body.rating);
     const sheet = getSheet();
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
@@ -92,6 +112,20 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// One rating per person per day; saving again changes it.
+function saveEating(date, person, rating) {
+  const sheet = getEatingSheet();
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (dateToString(rows[i][0]) === date && rows[i][1] === person) {
+      sheet.getRange(i + 1, 3).setValue(rating);
+      return json({ ok: true, updated: true });
+    }
+  }
+  sheet.appendRow([date, person, rating]);
+  return json({ ok: true, updated: false });
 }
 
 function formatDate(date) {
