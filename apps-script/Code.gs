@@ -12,9 +12,16 @@ function getSheet() {
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
     sheet.appendRow(["Date", "Person", "Kg"]);
-    sheet.getRange("A:A").setNumberFormat("@");
   }
+  // Keep dates as plain text so Sheets doesn't convert them to date values.
+  sheet.getRange("A:A").setNumberFormat("@");
   return sheet;
+}
+
+// Rows written before the column was text come back as Date objects.
+function dateToString(value) {
+  if (value && typeof value.getTime === "function") return formatDate(value);
+  return String(value);
 }
 
 function json(data) {
@@ -29,7 +36,7 @@ function doGet() {
     rows
       .filter((row) => row[0] !== "")
       .map(([date, person, kg]) => ({
-        date: date instanceof Date ? formatDate(date) : String(date),
+        date: dateToString(date),
         person,
         kg: Number(kg),
       }))
@@ -59,8 +66,7 @@ function doPost(e) {
     const sheet = getSheet();
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
-      const rowDate = rows[i][0] instanceof Date ? formatDate(rows[i][0]) : String(rows[i][0]);
-      if (rowDate === date && rows[i][1] === person) {
+      if (dateToString(rows[i][0]) === date && rows[i][1] === person) {
         sheet.getRange(i + 1, 3).setValue(kg);
         return json({ ok: true, updated: true });
       }

@@ -1,5 +1,8 @@
 const ME_KEY = "weight-me";
 
+Chart.defaults.color = "#9aa1b2";
+Chart.defaults.borderColor = "#2c313c";
+
 const panelsEl = document.getElementById("panels");
 const messageEl = document.getElementById("message");
 const rangeButtons = document.querySelectorAll(".range button");

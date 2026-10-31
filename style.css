@@ -1,8 +1,17 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --surface: #1a1d24;
+  --text: #e6e8ee;
+  --muted: #9aa1b2;
+  --border: #2c313c;
+}
+
 body {
   font-family: system-ui, sans-serif;
   margin: 0;
-  background: #f5f5f5;
-  color: #222;
+  background: var(--bg);
+  color: var(--text);
 }
 
 main {
@@ -13,7 +22,8 @@ main {
 
 #message {
   padding: 8px 12px;
-  background: #fef3c7;
+  background: #4a3b10;
+  color: #fde68a;
   border-radius: 6px;
 }
 
@@ -24,7 +34,7 @@ main {
 }
 
 .panel {
-  background: #fff;
+  background: var(--surface);
   border-top: 4px solid var(--accent);
   border-radius: 6px;
   padding: 12px 16px;
@@ -37,11 +47,11 @@ main {
 
 .status {
   margin: 0 0 8px;
-  color: #666;
+  color: var(--muted);
 }
 
 .status.done {
-  color: #15803d;
+  color: #4ade80;
 }
 
 .row {
@@ -52,6 +62,14 @@ main {
 input, button {
   padding: 8px;
   font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+button {
+  cursor: pointer;
 }
 
 .row input {
@@ -61,19 +79,27 @@ input, button {
 
 .chart-section {
   margin-top: 16px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 6px;
   padding: 12px 16px;
 }
 
 .range {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.range button {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
 }
 
 .range button.active {
-  font-weight: bold;
-  background: #222;
-  color: #fff;
+  color: var(--text);
+  border-color: var(--border);
 }
