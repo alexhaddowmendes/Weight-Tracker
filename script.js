@@ -158,7 +158,7 @@ function renderChart() {
     type: "line",
     data: { labels, datasets },
     options: {
-      scales: { y: { title: { display: true, text: "kg" } } },
+      scales: { y: { beginAtZero: true, title: { display: true, text: "kg" } } },
       interaction: { mode: "index", intersect: false },
     },
   });
