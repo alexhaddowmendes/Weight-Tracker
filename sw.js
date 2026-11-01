@@ -1,6 +1,6 @@
 // Caches the app shell so the site opens instantly when launched from the home screen.
 // API calls (Apps Script) always go to the network.
-const CACHE = "weight-tracker-v1";
+const CACHE = "weight-tracker-v5";
 const SHELL = ["./", "index.html", "style.css", "script.js", "config.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {

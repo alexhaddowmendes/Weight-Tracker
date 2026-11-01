@@ -339,3 +339,30 @@ button {
   background: #5b1a1a;
   border-color: #f87171;
 }
+
+.eating[hidden],
+.eating-done[hidden] {
+  display: none;
+}
+
+.eating-done {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.eating-done .change {
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.row .go:active:not(:disabled) {
+  transform: scale(0.92) translateY(1px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}

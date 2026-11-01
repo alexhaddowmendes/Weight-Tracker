@@ -86,7 +86,7 @@ function doPost(e) {
 
   const { date, person } = body;
   const isEating = body.type === "eating";
-  const kg = Math.round(Number(body.kg) * 10) / 10;
+  const kg = Math.round(Number(body.kg) * 100) / 100;
 
   if (!PEOPLE.includes(person)) return json({ ok: false, error: "Unknown person" });
   if (isEating && !RATINGS.includes(body.rating)) return json({ ok: false, error: "Unknown rating" });

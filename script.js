@@ -50,6 +50,9 @@ async function fetchData() {
 // the "log yesterday" box to fill in a missed day.
 const backfill = {};
 
+// People who tapped "Change your mind?" to reopen the diet buttons.
+const changingDiet = {};
+
 function targetDate(name) {
   return backfill[name] ? shiftDate(todayString(), -1) : todayString();
 }
@@ -96,11 +99,15 @@ function buildPanels() {
         <p class="goal"></p>
         <div class="row">
           <div class="field">
-            <input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done"
+            <input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="send"
               placeholder="Not logged yet today" aria-label="${name}'s weight today in kg">
             <span class="unit">kg</span>
           </div>
           <button type="submit" class="go" aria-label="Save weight">➡️</button>
+        </div>
+        <div class="eating-done" hidden>
+          <span>Submitted</span>
+          <button type="button" class="change">(Change your mind?)</button>
         </div>
         <div class="eating">
           <span class="eating-label">Diet?</span>
@@ -115,15 +122,18 @@ function buildPanels() {
         </label>`;
       const input = panel.querySelector(".row input");
       input.addEventListener("input", () => (input.value = cleanWeight(input.value)));
-      // "change" fires when the entry is complete: Enter / Done on the keyboard, or tapping away.
-      input.addEventListener("change", () => saveWeight(panel, name));
       panel.addEventListener("submit", (event) => {
         event.preventDefault();
         input.blur();
+        saveWeight(panel, name);
       });
       panel.querySelectorAll(".eating-buttons button").forEach((b) =>
         b.addEventListener("click", () => onRate(name, b.dataset.rating))
       );
+      panel.querySelector(".eating-done .change").addEventListener("click", () => {
+        changingDiet[name] = true;
+        renderEating(name);
+      });
       panel.querySelector(".backfill input").addEventListener("change", (event) => {
         backfill[name] = event.target.checked;
         // Switch the box over to the other day's weight.
@@ -140,11 +150,19 @@ function buildPanels() {
   if (myInput) myInput.focus();
 }
 
-// Numbers and a single decimal point only, one decimal place (commas from
-// some keypads become points).
+// Numbers and a single decimal point only, up to two decimal places (commas
+// from some keypads become points).
 function cleanWeight(text) {
   const [whole, ...rest] = text.replace(/,/g, ".").replace(/[^0-9.]/g, "").split(".");
-  return rest.length ? `${whole}.${rest.join("").slice(0, 1)}` : whole;
+  return rest.length ? `${whole}.${rest.join("").slice(0, 2)}` : whole;
+}
+
+// Shows an icon on the save button, then puts the arrow back after `ms` (stays until replaced if omitted).
+function flashButton(form, icon, ms) {
+  const button = form.querySelector(".go");
+  clearTimeout(button.resetTimer);
+  button.textContent = icon;
+  if (ms) button.resetTimer = setTimeout(() => (button.textContent = "➡️"), ms);
 }
 
 async function saveWeight(form, person) {
@@ -173,16 +191,19 @@ async function saveWeight(form, person) {
 
   form.dataset.saving = "1";
   form.classList.add("saving");
+  flashButton(form, "⏳");
   try {
     const result = await postEntry(person, kg, targetDate(person));
     if (!result.ok) throw new Error(result.error);
     setMe(person);
     input.dataset.prefill = input.value; // so the refresh below treats it as saved
     await refresh();
+    flashButton(form, "✅", 1500);
     celebrateSave(form);
     if (reachesGoal) launchConfetti();
   } catch (error) {
     input.value = saved;
+    flashButton(form, "⚠️", 2000);
     showMessage(`Couldn't save: ${error.message}`);
   } finally {
     delete form.dataset.saving;
@@ -193,7 +214,11 @@ async function saveWeight(form, person) {
 async function onRate(person, rating) {
   const date = targetDate(person);
   const previous = eating.find((e) => e.person === person && e.date === date);
-  if (previous?.rating === rating) return;
+  changingDiet[person] = false;
+  if (previous?.rating === rating) {
+    renderEating(person);
+    return;
+  }
   if (backfill[person] && previous) return; // yesterday is only for a missed day
 
   // Update straight away; roll back if the save fails.
@@ -223,6 +248,12 @@ function setRating(person, rating, date) {
 function renderEating(name) {
   const rating = eating.find((e) => e.person === name && e.date === targetDate(name))?.rating;
   const locked = backfill[name] && Boolean(rating);
+  const panel = panelsEl.querySelector(`[data-person="${name}"]`);
+  // Once submitted, swap the buttons for a quiet note until they change their mind.
+  const submitted = Boolean(rating) && !changingDiet[name];
+  panel.querySelector(".eating").hidden = submitted;
+  panel.querySelector(".eating-done").hidden = !submitted;
+  panel.querySelector(".eating-done .change").hidden = locked;
   panelsEl.querySelectorAll(`[data-person="${name}"] .eating-buttons button`).forEach((b) => {
     const active = b.dataset.rating === rating;
     b.classList.toggle("active", active);
@@ -395,7 +426,7 @@ function renderGoal(name) {
     return;
   }
 
-  const diff = Math.round((latest.kg - goal) * 10) / 10;
+  const diff = Math.round((latest.kg - goal) * 100) / 100;
   if (diff > 0) goalEl.textContent = `Goal: ${goal} kg · ${diff} kg to lose`;
   else if (diff < 0) goalEl.textContent = `Goal: ${goal} kg · ${-diff} kg under goal`;
   else goalEl.textContent = `Goal: ${goal} kg · reached 🎉`;
@@ -549,6 +580,15 @@ async function refresh() {
     loadingEl.hidden = true;
   }
 }
+
+// A tab left open overnight still shows yesterday's state: reload when the day changes.
+let shownDay = todayString();
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || todayString() === shownDay || !API_URL) return;
+  shownDay = todayString();
+  for (const key of Object.keys(changingDiet)) delete changingDiet[key];
+  refresh().catch(() => showMessage("Couldn't load data. Check your connection and refresh."));
+});
 
 rangeButtons.forEach((button) => {
   button.addEventListener("click", () => {
